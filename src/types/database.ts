@@ -31,6 +31,7 @@ export interface Post {
 }
 
 export type CommentStatus = "pending" | "approved" | "rejected" | "generation_failed";
+export type CommentSource = "caption" | "image" | "link";
 
 export interface Comment {
   id: string;
@@ -41,6 +42,7 @@ export interface Comment {
   edited_content: string | null;
   status: CommentStatus;
   approved_by: string | null;
+  source: CommentSource;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +59,7 @@ export interface Contact {
   org_id: string;
   linkedin_profile_url: string;
   full_name: string;
+  headline: string | null;
   status: ContactStatus;
   last_contacted_at: string | null;
   created_at: string;
@@ -72,6 +75,18 @@ export interface ToneSample {
   file_path: string;
   extracted_text: string | null;
   processing_status: ToneProcessingStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DmDraft {
+  id: string;
+  user_id: string;
+  org_id: string;
+  conversation_context: string;
+  last_reply: string;
+  generated_content: string | null;
+  edited_content: string | null;
   created_at: string;
   updated_at: string;
 }

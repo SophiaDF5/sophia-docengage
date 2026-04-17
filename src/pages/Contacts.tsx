@@ -2,9 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
+import { callEdgeFunction } from "../lib/apiClient";
 import { useOrganization } from "../hooks/useOrganization";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import {
   Table,
   TableBody,
@@ -14,13 +17,20 @@ import {
   TableRow,
 } from "../components/ui/table";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "../components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { Skeleton } from "../components/ui/skeleton";
-import { ExternalLink, ChevronDown } from "lucide-react";
+import { ExternalLink, ChevronDown, Search, Loader2 } from "lucide-react";
 import type { Contact, ContactStatus } from "../types/database";
 
 const STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
@@ -51,7 +61,7 @@ export function Contacts() {
       if (!currentOrgId) return [];
       const { data, error } = await supabase
         .from("doc_contacts")
-        .select("id, user_id, org_id, linkedin_profile_url, full_name, status, last_contacted_at, created_at, updated_at")
+        .select("id, user_id, org_id, linkedin_profile_url, full_name, headline, status, last_contacted_at, created_at, updated_at")
         .eq("org_id", currentOrgId)
         .order("created_at", { ascending: false });
 
@@ -102,11 +112,14 @@ export function Contacts() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {contacts.length} contact{contacts.length === 1 ? "" : "s"} in pipeline
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Contacts</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {contacts.length} contact{contacts.length === 1 ? "" : "s"} in pipeline
+          </p>
+        </div>
+        <ScrapeDialog orgId={currentOrgId} />
       </div>
 
       {/* Status filters */}
@@ -142,7 +155,7 @@ export function Contacts() {
       ) : filtered.length === 0 ? (
         <p className="text-center py-8 text-muted-foreground">
           {contacts.length === 0
-            ? "No contacts yet. They will appear as posts are ingested."
+            ? "No contacts yet. Use 'Scrape Commenters' to find leads from LinkedIn posts."
             : "No contacts match this filter."}
         </p>
       ) : (
@@ -151,6 +164,7 @@ export function Contacts() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Headline</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Contacted</TableHead>
                 <TableHead>Added</TableHead>
@@ -162,6 +176,9 @@ export function Contacts() {
                 <TableRow key={contact.id}>
                   <TableCell className="font-medium">
                     {contact.full_name}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground truncate max-w-48">
+                    {contact.headline ?? "—"}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -219,5 +236,73 @@ export function Contacts() {
         </div>
       )}
     </div>
+  );
+}
+
+function ScrapeDialog({ orgId }: { orgId: string }) {
+  const [open, setOpen] = useState(false);
+  const [postUrl, setPostUrl] = useState("");
+  const queryClient = useQueryClient();
+
+  const scrapeMutation = useMutation({
+    mutationFn: async () => {
+      return callEdgeFunction<{
+        data: { contacts_found: number; contacts_saved: number };
+      }>("doc_scrape_post_commenters", {
+        org_id: orgId,
+        linkedin_post_url: postUrl,
+      });
+    },
+    onSuccess: (result) => {
+      const { contacts_found, contacts_saved } = result.data;
+      toast.success(`Found ${contacts_found} commenters, saved ${contacts_saved} new contacts`);
+      setOpen(false);
+      setPostUrl("");
+      queryClient.invalidateQueries({ queryKey: ["contacts", orgId] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Scraping failed");
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={<Button variant="outline" size="sm" />}
+      >
+        <Search className="h-4 w-4 mr-1" />
+        Scrape Commenters
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Scrape Post Commenters</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label>LinkedIn Post URL</Label>
+            <Input
+              value={postUrl}
+              onChange={(e) => setPostUrl(e.target.value)}
+              placeholder="https://linkedin.com/posts/..."
+              type="url"
+            />
+            <p className="text-xs text-muted-foreground">
+              Paste the URL of a LinkedIn post to find doctors who commented on it
+            </p>
+          </div>
+          <Button
+            className="w-full"
+            onClick={() => scrapeMutation.mutate()}
+            disabled={!postUrl.trim() || scrapeMutation.isPending}
+          >
+            {scrapeMutation.isPending ? (
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Scraping (this may take a minute)...</>
+            ) : (
+              "Scrape Commenters"
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

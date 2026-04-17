@@ -5,7 +5,8 @@ import { queryClient } from "./lib/queryClient";
 import { useAuth } from "./hooks/useAuth";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Login } from "./pages/auth/Login";
-import { Dashboard } from "./pages/Dashboard";
+import { CommentGenerator } from "./pages/CommentGenerator";
+import { DmAssistant } from "./pages/DmAssistant";
 import { Contacts } from "./pages/Contacts";
 import { Settings } from "./pages/Settings";
 
@@ -51,7 +52,8 @@ function AppRoutes() {
           </AuthGuard>
         }
       >
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={<CommentGenerator />} />
+        <Route path="/dm" element={<DmAssistant />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

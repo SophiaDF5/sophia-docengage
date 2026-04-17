@@ -3,7 +3,8 @@ import { useAuth } from "../../hooks/useAuth";
 import { useOrganization } from "../../hooks/useOrganization";
 import { Button } from "../ui/button";
 import {
-  LayoutDashboard,
+  MessageSquare,
+  Mail,
   Users,
   Settings,
   LogOut,
@@ -18,7 +19,8 @@ import {
 import { cn } from "../../lib/utils";
 
 const navItems = [
-  { path: "/", label: "Queue", icon: LayoutDashboard },
+  { path: "/", label: "Comments", icon: MessageSquare },
+  { path: "/dm", label: "DM Assistant", icon: Mail },
   { path: "/contacts", label: "Contacts", icon: Users },
   { path: "/settings", label: "Settings", icon: Settings },
 ];

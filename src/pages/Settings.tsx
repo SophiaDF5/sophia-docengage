@@ -56,7 +56,6 @@ export function Settings() {
       <OrgSettingsCard
         orgId={currentOrgId}
         orgName={currentOrg.name}
-        autoPostEnabled={currentOrg.auto_post_enabled}
         isOwner={isOwner}
       />
 
@@ -74,23 +73,20 @@ export function Settings() {
 function OrgSettingsCard({
   orgId,
   orgName,
-  autoPostEnabled,
   isOwner,
 }: {
   orgId: string;
   orgName: string;
-  autoPostEnabled: boolean;
   isOwner: boolean;
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState(orgName);
-  const [autoPost, setAutoPost] = useState(autoPostEnabled);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("doc_organizations")
-        .update({ name, auto_post_enabled: autoPost })
+        .update({ name })
         .eq("id", orgId);
       if (error) throw error;
     },
@@ -118,24 +114,6 @@ function OrgSettingsCard({
             disabled={!isOwner}
           />
         </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <Label>Auto-post comments</Label>
-            <p className="text-sm text-muted-foreground">
-              Automatically post AI-generated comments without review
-            </p>
-          </div>
-          <Button
-            variant={autoPost ? "default" : "outline"}
-            size="sm"
-            onClick={() => setAutoPost(!autoPost)}
-            disabled={!isOwner}
-          >
-            {autoPost ? "Enabled" : "Disabled"}
-          </Button>
-        </div>
-
         {isOwner && (
           <Button
             onClick={() => updateMutation.mutate()}
