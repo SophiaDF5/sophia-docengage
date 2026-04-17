@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Skeleton } from "../components/ui/skeleton";
-import { Copy, RefreshCw, Loader2 } from "lucide-react";
+import { Copy, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import type { DmDraft } from "../types/database";
 
 interface GenerateDmResult {
@@ -168,6 +168,23 @@ export function DmAssistant() {
 }
 
 function DmHistory({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("doc_dm_drafts")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dm-history", orgId] });
+      toast.success("Draft deleted");
+    },
+    onError: () => toast.error("Failed to delete draft"),
+  });
+
   const historyQuery = useQuery({
     queryKey: ["dm-history", orgId],
     queryFn: async () => {
@@ -201,17 +218,28 @@ function DmHistory({ orgId }: { orgId: string }) {
             <p className="text-sm line-clamp-3">
               {item.generated_content}
             </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                await navigator.clipboard.writeText(item.generated_content || "");
-                toast.success("Copied");
-              }}
-            >
-              <Copy className="h-3 w-3 mr-1" />
-              Copy
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(item.generated_content || "");
+                  toast.success("Copied");
+                }}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => deleteMutation.mutate(item.id)}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Delete
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ))}

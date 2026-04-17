@@ -12,7 +12,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
-import { Copy, RefreshCw, Upload, Loader2 } from "lucide-react";
+import { Copy, RefreshCw, Upload, Loader2, Trash2 } from "lucide-react";
 import type { CommentWithPost } from "../types/database";
 
 interface GenerateResult {
@@ -368,6 +368,9 @@ function LinkMode({ orgId }: { orgId: string }) {
 }
 
 function CommentHistory({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+
   const historyQuery = useQuery({
     queryKey: ["comment-history", orgId],
     queryFn: async () => {
@@ -377,11 +380,28 @@ function CommentHistory({ orgId }: { orgId: string }) {
           "id, generated_content, edited_content, source, created_at, doc_posts(author_name, content)"
         )
         .eq("org_id", orgId)
+        .gte("created_at", threeDaysAgo)
         .order("created_at", { ascending: false })
         .limit(20);
 
       if (error) throw error;
       return data as unknown as CommentWithPost[];
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (commentId: string) => {
+      const { error } = await supabase
+        .from("doc_comments")
+        .delete()
+        .eq("id", commentId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["comment-history", orgId] });
+    },
+    onError: () => {
+      toast.error("Failed to delete comment");
     },
   });
 
@@ -404,19 +424,31 @@ function CommentHistory({ orgId }: { orgId: string }) {
             <p className="text-sm line-clamp-3">
               {item.edited_content || item.generated_content}
             </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                await navigator.clipboard.writeText(
-                  item.edited_content || item.generated_content || ""
-                );
-                toast.success("Copied");
-              }}
-            >
-              <Copy className="h-3 w-3 mr-1" />
-              Copy
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(
+                    item.edited_content || item.generated_content || ""
+                  );
+                  toast.success("Copied");
+                }}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => deleteMutation.mutate(item.id)}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Delete
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ))}
