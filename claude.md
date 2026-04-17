@@ -141,6 +141,7 @@ Run these commands in order. Do not skip any step.
 - supabase/migrations/001_initial_schema.sql → Tables, RLS (original user-scoped), indexes
 - supabase/migrations/002_fix_rls_org_scoped.sql → Fixes RLS to org-membership scoping, adds helper functions
 - supabase/migrations/003_unique_post_per_org.sql → Unique constraints on posts and contacts per org
+- supabase/migrations/004_fix_members_rls_recursion.sql → SECURITY DEFINER on helper functions to fix RLS recursion
 
 ### Deployment
 - docs/deployment/MANUAL_SQL_OPERATIONS.md  → Manual SQL that must be run
