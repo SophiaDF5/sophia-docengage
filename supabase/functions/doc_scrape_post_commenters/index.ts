@@ -9,13 +9,17 @@ const ScrapeSchema = z.object({
   linkedin_post_url: z.string().url(),
 });
 
-interface ApifyEngager {
-  linkedinUrl?: string;
-  fullName?: string;
-  headline?: string;
-  connectionDegree?: string;
-  engagementType?: string;
+interface ApifyComment {
+  data_type: "comment";
+  author?: { name?: string; headline?: string; profile_url?: string };
 }
+
+interface ApifyReaction {
+  data_type: "reaction";
+  reactor?: { name?: string; headline?: string; profile_url?: string };
+}
+
+type ApifyItem = ApifyComment | ApifyReaction;
 
 const DOCTOR_KEYWORDS = [
   "doctor", "dr.", "dr ", "physician", "surgeon", "medical director",
@@ -28,7 +32,6 @@ const DOCTOR_KEYWORDS = [
   "chief medical", "cmo", "attending", "resident", "fellow",
 ];
 
-// Short abbreviations that need word-boundary matching to avoid false positives
 const DOCTOR_KEYWORDS_EXACT = [/\bmd\b/, /\bdo\b/];
 
 function isDoctorLead(name: string, headline: string): boolean {
@@ -37,6 +40,10 @@ function isDoctorLead(name: string, headline: string): boolean {
     DOCTOR_KEYWORDS.some((kw) => text.includes(kw)) ||
     DOCTOR_KEYWORDS_EXACT.some((re) => re.test(text))
   );
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 Deno.serve(async (req: Request) => {
@@ -58,8 +65,6 @@ Deno.serve(async (req: Request) => {
 
     // 3. Check required env vars
     const apifyToken = Deno.env.get("APIFY_API_KEY");
-    const liAt = Deno.env.get("LINKEDIN_LI_AT");
-    const jsessionId = Deno.env.get("LINKEDIN_JSESSIONID");
 
     if (!apifyToken) {
       return new Response(
@@ -68,24 +73,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!liAt) {
-      return new Response(
-        JSON.stringify({ error: "LinkedIn cookies not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 4. Build LinkedIn cookies in Cookie-Editor JSON array format
-    const cookies = [
-      { name: "li_at", value: liAt, domain: ".www.linkedin.com", path: "/", secure: true, httpOnly: true, sameSite: "None" },
-    ];
-    if (jsessionId) {
-      cookies.push({ name: "JSESSIONID", value: `"${jsessionId}"`, domain: ".www.linkedin.com", path: "/", secure: true, httpOnly: false, sameSite: "None" });
-    }
-
-    // 5. Scrape post engagers with real cookies
-    const actorId = "alizarin_refrigerator-owner~linkedin-post-engagers-scraper";
-    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&waitForFinish=180`;
+    // 4. Start Apify actor (no cookies needed)
+    const actorId = "unseenuser~linkedin-post-comment-reaction-extractor-no-cookies";
+    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}`;
 
     let runResponse: Response;
     try {
@@ -93,10 +83,7 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postUrls: [body.linkedin_post_url],
-          cookies: JSON.stringify(cookies),
-          demoMode: false,
-          maxEngagersPerPost: 100,
+          posts: [body.linkedin_post_url],
         }),
       });
     } catch (err) {
@@ -117,25 +104,45 @@ Deno.serve(async (req: Request) => {
     }
 
     const runData = await runResponse.json();
-    const runStatus = runData.data?.status;
+    const runId = runData.data?.id;
     const datasetId = runData.data?.defaultDatasetId;
 
-    console.log("Apify run status:", runStatus, "dataset:", datasetId);
+    console.log("Apify run started:", runId, "dataset:", datasetId);
 
-    if (runStatus === "FAILED") {
+    if (!runId || !datasetId) {
       return new Response(
-        JSON.stringify({ error: "Scraping failed — LinkedIn cookies may have expired" }),
+        JSON.stringify({ error: "Scraping service did not return a run ID" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!datasetId) {
-      return new Response(
-        JSON.stringify({
-          data: { total_engagers: 0, doctors_found: 0, contacts_saved: 0 },
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    // 5. Poll for completion (max ~5 minutes)
+    const maxWaitMs = 300_000;
+    const pollIntervalMs = 10_000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      await sleep(pollIntervalMs);
+
+      const statusResp = await fetch(
+        `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
       );
+      if (!statusResp.ok) {
+        console.error("Failed to poll Apify run status:", statusResp.status);
+        continue;
+      }
+
+      const statusData = await statusResp.json();
+      const status = statusData.data?.status;
+      console.log("Apify poll:", status, `(${Math.round((Date.now() - startTime) / 1000)}s)`);
+
+      if (status === "SUCCEEDED") break;
+      if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
+        return new Response(
+          JSON.stringify({ error: "Scraping failed — the actor did not complete successfully" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // 6. Fetch results
@@ -150,24 +157,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const allEngagers: ApifyEngager[] = await datasetResponse.json();
-    console.log("Total engagers from Apify:", allEngagers.length);
+    const allItems: ApifyItem[] = await datasetResponse.json();
+    console.log("Total items from Apify:", allItems.length);
 
     // 7. Deduplicate and filter for doctor leads
     const seen = new Set<string>();
-    const doctorLeads: { name: string; profileUrl: string; headline: string; isConnected: boolean }[] = [];
+    const doctorLeads: { name: string; profileUrl: string; headline: string; engagementType: string }[] = [];
 
-    for (const engager of allEngagers) {
-      const profileUrl = engager.linkedinUrl;
-      const name = engager.fullName;
-      const headline = engager.headline ?? "";
+    for (const item of allItems) {
+      const person = item.data_type === "comment"
+        ? (item as ApifyComment).author
+        : (item as ApifyReaction).reactor;
+
+      const profileUrl = person?.profile_url;
+      const name = person?.name;
+      const headline = person?.headline ?? "";
 
       if (!profileUrl || !name || seen.has(profileUrl)) continue;
       seen.add(profileUrl);
 
       if (isDoctorLead(name, headline)) {
-        const isConnected = engager.connectionDegree === "1st";
-        doctorLeads.push({ name, profileUrl, headline, isConnected });
+        doctorLeads.push({ name, profileUrl, headline, engagementType: item.data_type });
       }
     }
 
@@ -187,7 +197,7 @@ Deno.serve(async (req: Request) => {
             linkedin_profile_url: lead.profileUrl,
             full_name: lead.name,
             headline: lead.headline || null,
-            is_connected: lead.isConnected,
+            is_connected: false,
             status: "pending",
           },
           { onConflict: "org_id,linkedin_profile_url" }
