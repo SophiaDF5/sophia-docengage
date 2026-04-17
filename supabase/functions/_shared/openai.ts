@@ -55,13 +55,11 @@ export async function callOpenAI(
     });
 
     if (response.status === 429) throw new Error("Rate limited");
-    if (response.status >= 500) {
-      console.error("OpenAI server error:", response.status);
-      throw new Error("Server error");
-    }
+    if (response.status >= 500) throw new Error(`OpenAI server error: ${response.status}`);
     if (!response.ok) {
-      console.error("OpenAI error:", response.status, await response.text());
-      return null;
+      const errBody = await response.text();
+      console.error("OpenAI error:", response.status, errBody);
+      throw new Error(`OpenAI error ${response.status}: ${errBody}`);
     }
 
     const data = await response.json();
@@ -113,13 +111,11 @@ export async function callOpenAIVision(
     });
 
     if (response.status === 429) throw new Error("Rate limited");
-    if (response.status >= 500) {
-      console.error("OpenAI vision server error:", response.status);
-      throw new Error("Server error");
-    }
+    if (response.status >= 500) throw new Error(`OpenAI vision server error: ${response.status}`);
     if (!response.ok) {
-      console.error("OpenAI vision error:", response.status, await response.text());
-      return null;
+      const errBody = await response.text();
+      console.error("OpenAI vision error:", response.status, errBody);
+      throw new Error(`OpenAI vision error ${response.status}: ${errBody}`);
     }
 
     const data = await response.json();

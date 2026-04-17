@@ -36,10 +36,13 @@ export function useOrganization() {
     },
   });
 
-  // Auto-select first org if none selected
+  // Auto-select first org if none selected or stored org no longer exists
   useEffect(() => {
-    if (!currentOrgId && orgsQuery.data && orgsQuery.data.length > 0) {
-      setCurrentOrgId(orgsQuery.data[0].id);
+    if (orgsQuery.data && orgsQuery.data.length > 0) {
+      const validOrg = orgsQuery.data.find((o) => o.id === currentOrgId);
+      if (!validOrg) {
+        setCurrentOrgId(orgsQuery.data[0].id);
+      }
     }
   }, [currentOrgId, orgsQuery.data]);
 

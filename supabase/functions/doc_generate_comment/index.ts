@@ -65,50 +65,59 @@ Deno.serve(async (req: Request) => {
     let generatedContent: string | null = null;
     let extractedContent = body.content ?? null;
 
-    if (body.mode === "image") {
-      // Download image from storage
-      const serviceClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-
-      const { data: fileData, error: downloadError } = await serviceClient
-        .storage
-        .from("doc_comment_images")
-        .download(body.image_path!);
-
-      if (downloadError || !fileData) {
-        console.error("Failed to download image:", downloadError);
-        return new Response(
-          JSON.stringify({ error: "Failed to download uploaded image" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    try {
+      if (body.mode === "image") {
+        // Download image from storage
+        const serviceClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
         );
+
+        const { data: fileData, error: downloadError } = await serviceClient
+          .storage
+          .from("doc_comment_images")
+          .download(body.image_path!);
+
+        if (downloadError || !fileData) {
+          console.error("Failed to download image:", downloadError);
+          return new Response(
+            JSON.stringify({ error: "Failed to download uploaded image" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const bytes = new Uint8Array(await fileData.arrayBuffer());
+        const base64 = btoa(String.fromCharCode(...bytes));
+        const ext = body.image_path!.split(".").pop()?.toLowerCase() ?? "png";
+        const mimeType =
+          ext === "jpg" || ext === "jpeg"
+            ? "image/jpeg"
+            : ext === "webp"
+              ? "image/webp"
+              : "image/png";
+
+        generatedContent = await callOpenAIVision(systemPrompt, base64, mimeType);
+      } else {
+        // Caption or link mode
+        const authorContext = body.author_headline
+          ? `${body.author_name ?? "Someone"} (${body.author_headline})`
+          : body.author_name ?? "a LinkedIn user";
+
+        const userPrompt = `Draft a LinkedIn comment for this post by ${authorContext}:\n\n${body.content}`;
+        generatedContent = await callOpenAI(systemPrompt, userPrompt);
       }
-
-      const bytes = new Uint8Array(await fileData.arrayBuffer());
-      const base64 = btoa(String.fromCharCode(...bytes));
-      const ext = body.image_path!.split(".").pop()?.toLowerCase() ?? "png";
-      const mimeType =
-        ext === "jpg" || ext === "jpeg"
-          ? "image/jpeg"
-          : ext === "webp"
-            ? "image/webp"
-            : "image/png";
-
-      generatedContent = await callOpenAIVision(systemPrompt, base64, mimeType);
-    } else {
-      // Caption or link mode
-      const authorContext = body.author_headline
-        ? `${body.author_name ?? "Someone"} (${body.author_headline})`
-        : body.author_name ?? "a LinkedIn user";
-
-      const userPrompt = `Draft a LinkedIn comment for this post by ${authorContext}:\n\n${body.content}`;
-      generatedContent = await callOpenAI(systemPrompt, userPrompt);
+    } catch (aiErr) {
+      console.error("OpenAI call failed:", aiErr);
+      const msg = aiErr instanceof Error ? aiErr.message : "Unknown AI error";
+      return new Response(
+        JSON.stringify({ error: `AI generation failed: ${msg}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     if (!generatedContent) {
       return new Response(
-        JSON.stringify({ error: "AI draft unavailable - please try again" }),
+        JSON.stringify({ error: "AI draft unavailable — OPENAI_API_KEY may not be set" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

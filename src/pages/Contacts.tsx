@@ -199,21 +199,38 @@ export function Contacts() {
                     {contact.headline ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7"
-                      onClick={() =>
-                        toggleConnectionMutation.mutate({
-                          contactId: contact.id,
-                          is_connected: !contact.is_connected,
-                        })
-                      }
-                    >
-                      <Badge variant={contact.is_connected ? "default" : "outline"}>
-                        {contact.is_connected ? "Yes" : "No"}
-                      </Badge>
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button variant="ghost" size="sm" className="gap-1 h-7" />}
+                      >
+                        <Badge variant={contact.is_connected ? "default" : "outline"}>
+                          {contact.is_connected ? "Yes" : "No"}
+                        </Badge>
+                        <ChevronDown className="h-3 w-3" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            toggleConnectionMutation.mutate({
+                              contactId: contact.id,
+                              is_connected: true,
+                            })
+                          }
+                        >
+                          Yes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            toggleConnectionMutation.mutate({
+                              contactId: contact.id,
+                              is_connected: false,
+                            })
+                          }
+                        >
+                          No
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

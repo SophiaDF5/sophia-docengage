@@ -21,30 +21,46 @@ interface ApifyReaction {
 
 type ApifyItem = ApifyComment | ApifyReaction;
 
-const DOCTOR_KEYWORDS = [
+const HEALTHCARE_KEYWORDS = [
+  // Doctors & physicians
   "doctor", "dr.", "dr ", "physician", "surgeon", "medical director",
+  // Specialties
   "cardiologist", "dermatologist", "neurologist", "oncologist", "radiologist",
   "anesthesiologist", "pathologist", "psychiatrist", "pediatrician", "urologist",
   "ophthalmologist", "orthopedic", "gastroenterologist", "endocrinologist",
   "pulmonologist", "nephrologist", "rheumatologist", "hematologist",
-  "m.d.", "mbbs", "m.b.b.s", "d.o.",
-  "hospital", "clinic", "healthcare", "medical", "medicine",
-  "chief medical", "cmo", "attending", "resident", "fellow",
+  "internist", "gynecologist", "obstetrician", "geriatrician", "immunologist",
+  // Credentials
+  "m.d.", "mbbs", "m.b.b.s", "d.o.", "dpt", "pharmd", "dnp", "phd",
+  "facp", "facs", "fapa", "faafp", "famia",
+  // Allied health & nursing
+  "nurse", "nursing", "rn ", "aprn", "physician assistant",
+  "therapist", "pharmacist", "dentist", "optometrist", "chiropractor",
+  // Healthcare orgs & roles
+  "hospital", "clinic", "healthcare", "health care", "health system",
+  "medical", "medicine", "clinical", "patient",
+  "chief medical", "cmo", "cmio", "cno", "cido",
+  "attending", "resident", "fellow",
+  // Health-adjacent
+  "health tech", "healthtech", "medtech", "biotech", "digital health",
+  "health informatics", "clinical informatics", "ehr", "emr", "epic",
+  "telehealth", "telemedicine",
 ];
 
-const DOCTOR_KEYWORDS_EXACT = [/\bmd\b/, /\bdo\b/];
+const HEALTHCARE_KEYWORDS_EXACT = [/\bmd\b/, /\bdo\b/, /\bpa\b/, /\bnp\b/, /\brn\b/, /\bdpt\b/, /\bcoo\b/];
 
 function isDoctorLead(name: string, headline: string): boolean {
   const text = `${name.toLowerCase()} ${headline.toLowerCase()}`;
   return (
-    DOCTOR_KEYWORDS.some((kw) => text.includes(kw)) ||
-    DOCTOR_KEYWORDS_EXACT.some((re) => re.test(text))
+    HEALTHCARE_KEYWORDS.some((kw) => text.includes(kw)) ||
+    HEALTHCARE_KEYWORDS_EXACT.some((re) => re.test(text))
   );
 }
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -75,7 +91,7 @@ Deno.serve(async (req: Request) => {
 
     // 4. Start Apify actor (no cookies needed)
     const actorId = "unseenuser~linkedin-post-comment-reaction-extractor-no-cookies";
-    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}`;
+    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&maxItems=500`;
 
     let runResponse: Response;
     try {
