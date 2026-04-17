@@ -57,7 +57,8 @@ Run these commands in order. Do not skip any step.
    JWT via auth.uid() (database) or requireAuth() (edge functions).
 
 3. NEVER create a table without enabling RLS and adding all four policies
-   (SELECT, INSERT, UPDATE, DELETE) scoped to auth.uid().
+   (SELECT, INSERT, UPDATE, DELETE) scoped to org membership via
+   doc_user_org_ids(). INSERT policies must also enforce user_id = auth.uid().
 
 4. NEVER create an edge function without the full middleware chain:
    handlePreflight → requireAuth → rateLimit → validateBody →
@@ -137,7 +138,9 @@ Run these commands in order. Do not skip any step.
 - src/lib/apiClient.ts                      → Edge function caller
 
 ### Database
-- supabase/migrations/001_initial_schema.sql → Tables, RLS, policies, indexes
+- supabase/migrations/001_initial_schema.sql → Tables, RLS (original user-scoped), indexes
+- supabase/migrations/002_fix_rls_org_scoped.sql → Fixes RLS to org-membership scoping, adds helper functions
+- supabase/migrations/003_unique_post_per_org.sql → Unique constraints on posts and contacts per org
 
 ### Deployment
 - docs/deployment/MANUAL_SQL_OPERATIONS.md  → Manual SQL that must be run
@@ -148,6 +151,7 @@ Run these commands in order. Do not skip any step.
 - supabase/functions/doc_approve_comment/index.ts → Approves comment, triggers Make webhook to post
 - supabase/functions/doc_process_tone/index.ts    → Processes media via Whisper, updates org system prompt
 - supabase/functions/doc_daily_followups/index.ts → Cron job pushing stale contacts to Make.com
+- supabase/functions/doc_invite_member/index.ts  → Invites user to org (admin/owner only, uses service_role)
 
 ### Frontend
 - src/pages/Dashboard.tsx     → Centralized queue of pending AI comments
@@ -186,7 +190,7 @@ Run these commands in order. Do not skip any step.
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(), auto-trigger |
 
-Policies: doc_organizations_select_own, doc_organizations_insert_own, doc_organizations_update_own, doc_organizations_delete_own
+Policies: doc_organizations_select_member (org membership), doc_organizations_insert_auth (creator), doc_organizations_update_owner (owner only), doc_organizations_delete_owner (owner only)
 Indexes: doc_organizations_user_id_idx
 
 ### doc_organization_members
@@ -199,7 +203,7 @@ Indexes: doc_organizations_user_id_idx
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(), auto-trigger |
 
-Policies: doc_organization_members_select_own, doc_organization_members_insert_own, doc_organization_members_update_own, doc_organization_members_delete_own
+Policies: doc_organization_members_select_org (see members of your orgs), doc_organization_members_insert_admin (owner/admin only), doc_organization_members_update_admin (owner/admin only), doc_organization_members_delete_admin (owner/admin only)
 Indexes: doc_organization_members_user_id_idx, doc_organization_members_org_id_idx
 
 ### doc_posts
@@ -216,7 +220,7 @@ Indexes: doc_organization_members_user_id_idx, doc_organization_members_org_id_i
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(), auto-trigger |
 
-Policies: doc_posts_select_own, doc_posts_insert_own, doc_posts_update_own, doc_posts_delete_own
+Policies: doc_posts_select_org, doc_posts_insert_org, doc_posts_update_org, doc_posts_delete_org (all scoped to org membership)
 Indexes: doc_posts_user_id_idx, doc_posts_org_id_idx
 
 ### doc_comments
@@ -233,7 +237,7 @@ Indexes: doc_posts_user_id_idx, doc_posts_org_id_idx
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(), auto-trigger |
 
-Policies: doc_comments_select_own, doc_comments_insert_own, doc_comments_update_own, doc_comments_delete_own
+Policies: doc_comments_select_org, doc_comments_insert_org, doc_comments_update_org, doc_comments_delete_org (all scoped to org membership)
 Indexes: doc_comments_user_id_idx, doc_comments_post_id_idx, doc_comments_org_id_idx, doc_comments_status_idx, doc_comments_org_status_idx
 Realtime: Enabled ONLY for `status` column
 
@@ -250,7 +254,7 @@ Realtime: Enabled ONLY for `status` column
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(), auto-trigger |
 
-Policies: doc_contacts_select_own, doc_contacts_insert_own, doc_contacts_update_own, doc_contacts_delete_own
+Policies: doc_contacts_select_org, doc_contacts_insert_org, doc_contacts_update_org, doc_contacts_delete_org (all scoped to org membership)
 Indexes: doc_contacts_user_id_idx, doc_contacts_org_id_idx, doc_contacts_status_idx, doc_contacts_org_status_idx
 
 ### doc_tone_samples
@@ -265,7 +269,7 @@ Indexes: doc_contacts_user_id_idx, doc_contacts_org_id_idx, doc_contacts_status_
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(), auto-trigger |
 
-Policies: doc_tone_samples_select_own, doc_tone_samples_insert_own, doc_tone_samples_update_own, doc_tone_samples_delete_own
+Policies: doc_tone_samples_select_org, doc_tone_samples_insert_org, doc_tone_samples_update_org, doc_tone_samples_delete_org (all scoped to org membership)
 Indexes: doc_tone_samples_user_id_idx, doc_tone_samples_org_id_idx
 
 ### Storage Buckets
