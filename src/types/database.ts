@@ -51,7 +51,7 @@ export interface CommentWithPost extends Comment {
   doc_posts: Post;
 }
 
-export type ContactStatus = "no_action" | "connected" | "replied";
+export type ContactStatus = "pending" | "messaged" | "engaged";
 
 export interface Contact {
   id: string;
@@ -60,6 +60,8 @@ export interface Contact {
   linkedin_profile_url: string;
   full_name: string;
   headline: string | null;
+  email: string | null;
+  is_connected: boolean;
   status: ContactStatus;
   last_contacted_at: string | null;
   created_at: string;

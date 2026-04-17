@@ -9,10 +9,28 @@ const ScrapeSchema = z.object({
   linkedin_post_url: z.string().url(),
 });
 
-interface ApifyCommenter {
-  profileUrl?: string;
+interface ApifyEngager {
+  linkedinUrl?: string;
   fullName?: string;
   headline?: string;
+  connectionDegree?: string;
+  engagementType?: string;
+}
+
+const DOCTOR_KEYWORDS = [
+  "doctor", "dr.", "dr ", "physician", "surgeon", "medical director",
+  "cardiologist", "dermatologist", "neurologist", "oncologist", "radiologist",
+  "anesthesiologist", "pathologist", "psychiatrist", "pediatrician", "urologist",
+  "ophthalmologist", "orthopedic", "gastroenterologist", "endocrinologist",
+  "pulmonologist", "nephrologist", "rheumatologist", "hematologist",
+  "md", "m.d.", "mbbs", "m.b.b.s", "do", "d.o.",
+  "hospital", "clinic", "healthcare", "medical", "medicine",
+  "chief medical", "cmo", "attending", "resident", "fellow",
+];
+
+function isDoctorLead(name: string, headline: string): boolean {
+  const text = `${name.toLowerCase()} ${headline.toLowerCase()}`;
+  return DOCTOR_KEYWORDS.some((kw) => text.includes(kw));
 }
 
 Deno.serve(async (req: Request) => {
@@ -32,8 +50,11 @@ Deno.serve(async (req: Request) => {
     const [body, validationError] = await validateBody(req, ScrapeSchema);
     if (validationError) return validationError;
 
-    // 3. Check Apify API key
+    // 3. Check required env vars
     const apifyToken = Deno.env.get("APIFY_API_KEY");
+    const liAt = Deno.env.get("LINKEDIN_LI_AT");
+    const jsessionId = Deno.env.get("LINKEDIN_JSESSIONID");
+
     if (!apifyToken) {
       return new Response(
         JSON.stringify({ error: "Apify API key not configured" }),
@@ -41,9 +62,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Start Apify actor run (synchronous — waits for completion)
-    const actorId = "curious_coder~linkedin-post-commenters";
-    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&waitForFinish=120`;
+    if (!liAt) {
+      return new Response(
+        JSON.stringify({ error: "LinkedIn cookies not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 4. Build LinkedIn cookies array
+    const cookies = [
+      { name: "li_at", value: liAt, domain: ".www.linkedin.com" },
+    ];
+    if (jsessionId) {
+      cookies.push({ name: "JSESSIONID", value: `"${jsessionId}"`, domain: ".www.linkedin.com" });
+    }
+
+    // 5. Scrape post engagers with real cookies
+    const actorId = "alizarin_refrigerator-owner~linkedin-post-engagers-scraper";
+    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&waitForFinish=180`;
 
     let runResponse: Response;
     try {
@@ -51,7 +87,10 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postUrl: body.linkedin_post_url,
+          postUrls: [body.linkedin_post_url],
+          cookies,
+          demoMode: false,
+          maxEngagersPerPost: 100,
         }),
       });
     } catch (err) {
@@ -63,7 +102,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!runResponse.ok) {
-      console.error("Apify run failed:", runResponse.status, await runResponse.text());
+      const errText = await runResponse.text();
+      console.error("Apify run failed:", runResponse.status, errText);
       return new Response(
         JSON.stringify({ error: "Scraping service returned an error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -71,7 +111,17 @@ Deno.serve(async (req: Request) => {
     }
 
     const runData = await runResponse.json();
+    const runStatus = runData.data?.status;
     const datasetId = runData.data?.defaultDatasetId;
+
+    console.log("Apify run status:", runStatus, "dataset:", datasetId);
+
+    if (runStatus === "FAILED") {
+      return new Response(
+        JSON.stringify({ error: "Scraping failed — LinkedIn cookies may have expired" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!datasetId) {
       return new Response(
@@ -80,7 +130,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 5. Fetch results from dataset
+    // 6. Fetch results
     const datasetUrl = `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}`;
     const datasetResponse = await fetch(datasetUrl);
 
@@ -92,36 +142,60 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const commenters: ApifyCommenter[] = await datasetResponse.json();
+    const allEngagers: ApifyEngager[] = await datasetResponse.json();
+    console.log("Total engagers from Apify:", allEngagers.length);
 
-    // 6. Upsert contacts
+    // 7. Deduplicate and filter for doctor leads
+    const seen = new Set<string>();
+    const doctorLeads: { name: string; profileUrl: string; headline: string; isConnected: boolean }[] = [];
+
+    for (const engager of allEngagers) {
+      const profileUrl = engager.linkedinUrl;
+      const name = engager.fullName;
+      const headline = engager.headline ?? "";
+
+      if (!profileUrl || !name || seen.has(profileUrl)) continue;
+      seen.add(profileUrl);
+
+      if (isDoctorLead(name, headline)) {
+        const isConnected = engager.connectionDegree === "1st";
+        doctorLeads.push({ name, profileUrl, headline, isConnected });
+      }
+    }
+
+    console.log("Doctor leads found:", doctorLeads.length);
+
+    // 8. Upsert contacts
     const supabase = createUserClient(req);
     let contactsNew = 0;
 
-    for (const commenter of commenters) {
-      if (!commenter.profileUrl || !commenter.fullName) continue;
-
+    for (const lead of doctorLeads) {
       const { error } = await supabase
         .from("doc_contacts")
         .upsert(
           {
+            user_id: user.id,
             org_id: body.org_id,
-            linkedin_profile_url: commenter.profileUrl,
-            full_name: commenter.fullName,
-            headline: commenter.headline ?? null,
-            status: "no_action",
+            linkedin_profile_url: lead.profileUrl,
+            full_name: lead.name,
+            headline: lead.headline || null,
+            is_connected: lead.isConnected,
+            status: "pending",
           },
           { onConflict: "org_id,linkedin_profile_url", ignoreDuplicates: true }
         );
 
       if (!error) contactsNew++;
-      else console.error("Failed to upsert contact:", commenter.profileUrl, error);
+      else console.error("Failed to upsert contact:", lead.profileUrl, error.message);
     }
+
+    console.log("Contacts saved:", contactsNew);
 
     return new Response(
       JSON.stringify({
         data: {
-          contacts_found: commenters.length,
+          total_engagers: seen.size,
+          doctors_found: doctorLeads.length,
           contacts_saved: contactsNew,
         },
       }),

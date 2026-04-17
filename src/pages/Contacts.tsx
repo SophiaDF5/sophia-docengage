@@ -34,9 +34,9 @@ import { ExternalLink, ChevronDown, Search, Loader2 } from "lucide-react";
 import type { Contact, ContactStatus } from "../types/database";
 
 const STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
-  { value: "no_action", label: "No Action" },
-  { value: "connected", label: "Connected" },
-  { value: "replied", label: "Replied" },
+  { value: "pending", label: "Pending" },
+  { value: "messaged", label: "Messaged" },
+  { value: "engaged", label: "Engaged" },
 ];
 
 const STATUS_FILTERS: { value: ContactStatus | "all"; label: string }[] = [
@@ -45,9 +45,9 @@ const STATUS_FILTERS: { value: ContactStatus | "all"; label: string }[] = [
 ];
 
 const statusBadgeVariant: Record<ContactStatus, "outline" | "default" | "secondary"> = {
-  no_action: "outline",
-  connected: "default",
-  replied: "secondary",
+  pending: "outline",
+  messaged: "default",
+  engaged: "secondary",
 };
 
 export function Contacts() {
@@ -61,7 +61,7 @@ export function Contacts() {
       if (!currentOrgId) return [];
       const { data, error } = await supabase
         .from("doc_contacts")
-        .select("id, user_id, org_id, linkedin_profile_url, full_name, headline, status, last_contacted_at, created_at, updated_at")
+        .select("id, user_id, org_id, linkedin_profile_url, full_name, headline, email, is_connected, status, last_contacted_at, created_at, updated_at")
         .eq("org_id", currentOrgId)
         .order("created_at", { ascending: false });
 
@@ -80,11 +80,28 @@ export function Contacts() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Contact status updated");
+      toast.success("Status updated");
       queryClient.invalidateQueries({ queryKey: ["contacts", currentOrgId] });
     },
     onError: () => {
-      toast.error("Failed to update contact status");
+      toast.error("Failed to update status");
+    },
+  });
+
+  const toggleConnectionMutation = useMutation({
+    mutationFn: async ({ contactId, is_connected }: { contactId: string; is_connected: boolean }) => {
+      const { error } = await supabase
+        .from("doc_contacts")
+        .update({ is_connected })
+        .eq("id", contactId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Connection updated");
+      queryClient.invalidateQueries({ queryKey: ["contacts", currentOrgId] });
+    },
+    onError: () => {
+      toast.error("Failed to update connection");
     },
   });
 
@@ -165,6 +182,7 @@ export function Contacts() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Headline</TableHead>
+                <TableHead>Connected</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last Contacted</TableHead>
                 <TableHead>Added</TableHead>
@@ -181,15 +199,29 @@ export function Contacts() {
                     {contact.headline ?? "—"}
                   </TableCell>
                   <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7"
+                      onClick={() =>
+                        toggleConnectionMutation.mutate({
+                          contactId: contact.id,
+                          is_connected: !contact.is_connected,
+                        })
+                      }
+                    >
+                      <Badge variant={contact.is_connected ? "default" : "outline"}>
+                        {contact.is_connected ? "Yes" : "No"}
+                      </Badge>
+                    </Button>
+                  </TableCell>
+                  <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         render={<Button variant="ghost" size="sm" className="gap-1 h-7" />}
                       >
                         <Badge variant={statusBadgeVariant[contact.status]}>
-                          {contact.status === "no_action"
-                            ? "No Action"
-                            : contact.status.charAt(0).toUpperCase() +
-                              contact.status.slice(1)}
+                          {contact.status.charAt(0).toUpperCase() + contact.status.slice(1)}
                         </Badge>
                         <ChevronDown className="h-3 w-3" />
                       </DropdownMenuTrigger>
@@ -247,15 +279,15 @@ function ScrapeDialog({ orgId }: { orgId: string }) {
   const scrapeMutation = useMutation({
     mutationFn: async () => {
       return callEdgeFunction<{
-        data: { contacts_found: number; contacts_saved: number };
+        data: { total_engagers: number; doctors_found: number; contacts_saved: number };
       }>("doc_scrape_post_commenters", {
         org_id: orgId,
         linkedin_post_url: postUrl,
       });
     },
     onSuccess: (result) => {
-      const { contacts_found, contacts_saved } = result.data;
-      toast.success(`Found ${contacts_found} commenters, saved ${contacts_saved} new contacts`);
+      const { total_engagers, doctors_found, contacts_saved } = result.data;
+      toast.success(`Scraped ${total_engagers} engagers, found ${doctors_found} doctors, saved ${contacts_saved} new contacts`);
       setOpen(false);
       setPostUrl("");
       queryClient.invalidateQueries({ queryKey: ["contacts", orgId] });
