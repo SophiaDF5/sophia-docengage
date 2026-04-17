@@ -23,14 +23,20 @@ const DOCTOR_KEYWORDS = [
   "anesthesiologist", "pathologist", "psychiatrist", "pediatrician", "urologist",
   "ophthalmologist", "orthopedic", "gastroenterologist", "endocrinologist",
   "pulmonologist", "nephrologist", "rheumatologist", "hematologist",
-  "md", "m.d.", "mbbs", "m.b.b.s", "do", "d.o.",
+  "m.d.", "mbbs", "m.b.b.s", "d.o.",
   "hospital", "clinic", "healthcare", "medical", "medicine",
   "chief medical", "cmo", "attending", "resident", "fellow",
 ];
 
+// Short abbreviations that need word-boundary matching to avoid false positives
+const DOCTOR_KEYWORDS_EXACT = [/\bmd\b/, /\bdo\b/];
+
 function isDoctorLead(name: string, headline: string): boolean {
   const text = `${name.toLowerCase()} ${headline.toLowerCase()}`;
-  return DOCTOR_KEYWORDS.some((kw) => text.includes(kw));
+  return (
+    DOCTOR_KEYWORDS.some((kw) => text.includes(kw)) ||
+    DOCTOR_KEYWORDS_EXACT.some((re) => re.test(text))
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -69,12 +75,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Build LinkedIn cookies array
+    // 4. Build LinkedIn cookies in Cookie-Editor JSON array format
     const cookies = [
-      { name: "li_at", value: liAt, domain: ".www.linkedin.com" },
+      { name: "li_at", value: liAt, domain: ".www.linkedin.com", path: "/", secure: true, httpOnly: true, sameSite: "None" },
     ];
     if (jsessionId) {
-      cookies.push({ name: "JSESSIONID", value: `"${jsessionId}"`, domain: ".www.linkedin.com" });
+      cookies.push({ name: "JSESSIONID", value: `"${jsessionId}"`, domain: ".www.linkedin.com", path: "/", secure: true, httpOnly: false, sameSite: "None" });
     }
 
     // 5. Scrape post engagers with real cookies
@@ -88,7 +94,7 @@ Deno.serve(async (req: Request) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postUrls: [body.linkedin_post_url],
-          cookies,
+          cookies: JSON.stringify(cookies),
           demoMode: false,
           maxEngagersPerPost: 100,
         }),
@@ -125,7 +131,9 @@ Deno.serve(async (req: Request) => {
 
     if (!datasetId) {
       return new Response(
-        JSON.stringify({ error: "Scraping completed but no results found" }),
+        JSON.stringify({
+          data: { total_engagers: 0, doctors_found: 0, contacts_saved: 0 },
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -182,7 +190,7 @@ Deno.serve(async (req: Request) => {
             is_connected: lead.isConnected,
             status: "pending",
           },
-          { onConflict: "org_id,linkedin_profile_url", ignoreDuplicates: true }
+          { onConflict: "org_id,linkedin_profile_url" }
         );
 
       if (!error) contactsNew++;
