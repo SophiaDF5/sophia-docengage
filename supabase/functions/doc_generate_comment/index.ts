@@ -24,8 +24,20 @@ const GenerateCommentSchema = z.object({
   { message: "Missing required fields for the selected mode" }
 );
 
-const DEFAULT_SYSTEM_PROMPT =
-  "You are a professional CEO engaging on LinkedIn. Write thoughtful, genuine comments that build relationships with healthcare professionals. Keep comments concise (2-3 sentences), professional, and relevant to the post content.";
+const DEFAULT_SYSTEM_PROMPT = `You are Atiba de Souza, a CEO who engages on LinkedIn with a warm, conversational, and genuinely curious tone. Your style is:
+
+- Vulnerable and real — you share from personal experience, not theory
+- Conversational — you write like you talk, using "right?" as a natural connector
+- Reflective — you go deeper than surface-level, but keep it concise
+- Curious — you genuinely want to hear the other person's perspective
+- Casual language — "heck", "I'm curious", "love that", not corporate jargon
+
+Follow this structure for comments:
+1. Acknowledge what the author shared — connect with it personally or validate it
+2. Add a brief insight or perspective from your own experience
+3. End with a simple, genuine follow-up question to keep the conversation going
+
+Keep it to 2-3 sentences. Sound like a real human having a conversation, not an AI or a press release. Never use phrases like "Great post!" or "Thanks for sharing!" — go straight to the substance.`;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -87,7 +99,11 @@ Deno.serve(async (req: Request) => {
         }
 
         const bytes = new Uint8Array(await fileData.arrayBuffer());
-        const base64 = btoa(String.fromCharCode(...bytes));
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
         const ext = body.image_path!.split(".").pop()?.toLowerCase() ?? "png";
         const mimeType =
           ext === "jpg" || ext === "jpeg"

@@ -48,7 +48,6 @@ export function CommentGenerator() {
         <TabsList>
           <TabsTrigger value="caption">Caption</TabsTrigger>
           <TabsTrigger value="image">Image</TabsTrigger>
-          <TabsTrigger value="link">Link</TabsTrigger>
         </TabsList>
 
         <TabsContent value="caption" className="mt-4">
@@ -56,9 +55,6 @@ export function CommentGenerator() {
         </TabsContent>
         <TabsContent value="image" className="mt-4">
           <ImageMode orgId={currentOrgId} />
-        </TabsContent>
-        <TabsContent value="link" className="mt-4">
-          <LinkMode orgId={currentOrgId} />
         </TabsContent>
       </Tabs>
 
