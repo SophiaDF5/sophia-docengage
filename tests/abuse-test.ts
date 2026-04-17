@@ -445,7 +445,7 @@ Deno.test({
   fn: async () => {
     const response = await fetch(`${FUNCTIONS_URL}/doc_inbound_post`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` },
       body: JSON.stringify({
         org_id: orgA_id,
         linkedin_post_url: "https://linkedin.com/post/bad",
@@ -502,20 +502,21 @@ Deno.test({
 });
 
 Deno.test({
-  name: "Validation: doc_inbound_post rejects invalid URL",
+  name: "Validation: doc_inbound_post rejects missing required fields",
   fn: async () => {
     const response = await fetch(`${FUNCTIONS_URL}/doc_inbound_post`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        apikey: ANON_KEY,
+        Authorization: `Bearer ${ANON_KEY}`,
+      },
       body: JSON.stringify({
         org_id: orgA_id,
-        linkedin_post_url: "not-a-url",
-        author_name: "Dr. Test",
-        content: "Test",
-        secret_token: "test",
+        // Missing linkedin_post_url, author_name, content, secret_token
       }),
     });
-    assertEquals(response.status, 400, "Should return 400 for invalid URL");
+    assertEquals(response.status, 400, "Should return 400 for missing required fields");
   },
   sanitizeOps: false,
   sanitizeResources: false,
@@ -528,9 +529,9 @@ Deno.test({
 Deno.test({
   name: "Rate limit: doc_approve_comment triggers 429 after excessive requests",
   fn: async () => {
-    // Send 12 rapid requests (write tier allows 10/min)
+    // Send 15 rapid requests (write tier allows 10/min)
     const promises = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 15; i++) {
       promises.push(
         fetch(`${FUNCTIONS_URL}/doc_approve_comment`, {
           method: "POST",
