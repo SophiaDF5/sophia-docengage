@@ -88,7 +88,12 @@ Deno.serve(async (req: Request) => {
       const bytes = new Uint8Array(await fileData.arrayBuffer());
       const base64 = btoa(String.fromCharCode(...bytes));
       const ext = body.image_path!.split(".").pop()?.toLowerCase() ?? "png";
-      const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+      const mimeType =
+        ext === "jpg" || ext === "jpeg"
+          ? "image/jpeg"
+          : ext === "webp"
+            ? "image/webp"
+            : "image/png";
 
       generatedContent = await callOpenAIVision(systemPrompt, base64, mimeType);
     } else {
@@ -104,7 +109,7 @@ Deno.serve(async (req: Request) => {
     if (!generatedContent) {
       return new Response(
         JSON.stringify({ error: "AI draft unavailable - please try again" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

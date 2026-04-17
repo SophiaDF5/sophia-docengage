@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
@@ -79,9 +79,9 @@ function OutputArea({
   const [edited, setEdited] = useState(content ?? "");
 
   // Sync when new content arrives
-  if (content && content !== edited && !isLoading) {
-    setEdited(content);
-  }
+  useEffect(() => {
+    if (content) setEdited(content);
+  }, [content]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(edited);
