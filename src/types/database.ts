@@ -81,6 +81,17 @@ export interface ToneSample {
   updated_at: string;
 }
 
+export interface DmLead {
+  id: string;
+  user_id: string;
+  org_id: string;
+  name: string;
+  bio: string | null;
+  links: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DmDraft {
   id: string;
   user_id: string;

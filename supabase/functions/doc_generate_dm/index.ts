@@ -9,6 +9,10 @@ const GenerateDmSchema = z.object({
   org_id: z.string().uuid(),
   conversation_context: z.string().min(1).max(5000),
   last_reply: z.string().min(1).max(3000),
+  new_topic: z.string().max(3000).optional(),
+  lead_name: z.string().max(200).optional(),
+  lead_bio: z.string().max(1000).optional(),
+  lead_links: z.string().max(500).optional(),
 });
 
 Deno.serve(async (req: Request) => {
@@ -46,9 +50,37 @@ Deno.serve(async (req: Request) => {
     const basePrompt = org.ai_system_prompt ||
       "You are a professional CEO. Write warm, professional direct messages that build genuine relationships with healthcare professionals.";
 
-    const systemPrompt = `${basePrompt}\n\nYou are drafting a direct message reply. Match the tone and formality of the ongoing conversation. Keep your reply concise and natural — avoid sounding scripted.`;
+    const humanStyleGuide = `
 
-    const userPrompt = `Here is the conversation so far:\n\n${body.conversation_context}\n\nTheir last message:\n"${body.last_reply}"\n\nDraft a reply:`;
+FORMATTING RULES — this is critical:
+- Write like a real human texting. NOT like a corporate email.
+- Use "..." for trailing thoughts and natural pauses (e.g. "been thinking about this a lot...")
+- Use ALL CAPS sparingly for genuine emphasis (e.g. "that is SO true" or "I LOVE that")
+- Lowercase is fine for casual feel — you don't need to capitalize every sentence
+- Use "right?" and "you know?" as natural connectors
+- Short sentences. Fragment sentences are fine. Like this.
+- No bullet points, no numbered lists, no formal structure
+- Never use phrases like "I'd love to connect" or "Let's schedule a call" — too corporate
+- No emojis unless they fit naturally (max 1-2)
+- Sound like you're talking to a friend, not writing a LinkedIn message`;
+
+    let leadContext = "";
+    if (body.lead_name || body.lead_bio || body.lead_links) {
+      leadContext = "\n\nAbout the person you're messaging:";
+      if (body.lead_name) leadContext += `\nName: ${body.lead_name}`;
+      if (body.lead_bio) leadContext += `\nBio: ${body.lead_bio}`;
+      if (body.lead_links) leadContext += `\nLinks: ${body.lead_links}`;
+    }
+
+    const systemPrompt = `${basePrompt}${humanStyleGuide}\n\nYou are drafting a direct message reply. Match the tone and energy of the ongoing conversation. Keep your reply concise and natural — avoid sounding scripted.${body.new_topic ? " The user also wants to naturally bring up a new topic in this reply — weave it in so it doesn't feel forced." : ""}${leadContext}`;
+
+    let userPrompt = `Here is the conversation so far:\n\n${body.conversation_context}\n\nTheir last message:\n"${body.last_reply}"`;
+
+    if (body.new_topic) {
+      userPrompt += `\n\nAlso bring up this new topic naturally in your reply:\n"${body.new_topic}"`;
+    }
+
+    userPrompt += "\n\nDraft a reply:";
 
     // 4. Generate reply
     const generatedContent = await callOpenAI(systemPrompt, userPrompt);
