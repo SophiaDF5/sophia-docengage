@@ -135,7 +135,29 @@ function OutputArea({
 function CaptionMode({ orgId }: { orgId: string }) {
   const [content, setContent] = useState("");
   const [authorName, setAuthorName] = useState("");
+  const [authorLinkedin, setAuthorLinkedin] = useState("");
   const queryClient = useQueryClient();
+
+  const saveLeadIfNew = async () => {
+    if (!authorName.trim() || !authorLinkedin.trim()) return;
+    const { data: existing } = await supabase
+      .from("doc_dm_leads")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("links", authorLinkedin.trim())
+      .maybeSingle();
+    if (!existing) {
+      const { error } = await supabase.from("doc_dm_leads").insert({
+        org_id: orgId,
+        name: authorName.trim(),
+        links: authorLinkedin.trim(),
+      });
+      if (!error) {
+        queryClient.invalidateQueries({ queryKey: ["dm-leads", orgId] });
+        toast.success(`${authorName.trim()} saved to Leads`);
+      }
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -146,8 +168,9 @@ function CaptionMode({ orgId }: { orgId: string }) {
         author_name: authorName || undefined,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["comment-history", orgId] });
+      await saveLeadIfNew();
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Generation failed");
@@ -165,14 +188,29 @@ function CaptionMode({ orgId }: { orgId: string }) {
           rows={5}
         />
       </div>
-      <div className="space-y-2">
-        <Label>Author Name</Label>
-        <Input
-          value={authorName}
-          onChange={(e) => setAuthorName(e.target.value)}
-          placeholder="Dr. Smith"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Author Name</Label>
+          <Input
+            value={authorName}
+            onChange={(e) => setAuthorName(e.target.value)}
+            placeholder="Dr. Smith"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Author LinkedIn URL</Label>
+          <Input
+            value={authorLinkedin}
+            onChange={(e) => setAuthorLinkedin(e.target.value)}
+            placeholder="https://linkedin.com/in/dr-smith"
+          />
+        </div>
       </div>
+      {authorName.trim() && authorLinkedin.trim() && (
+        <p className="text-xs text-muted-foreground">
+          This person will be saved to Leads after generation.
+        </p>
+      )}
       <Button
         onClick={() => mutation.mutate()}
         disabled={!content.trim() || mutation.isPending}
@@ -196,7 +234,30 @@ function ImageMode({ orgId }: { orgId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [authorName, setAuthorName] = useState("");
+  const [authorLinkedin, setAuthorLinkedin] = useState("");
   const queryClient = useQueryClient();
+
+  const saveLeadIfNew = async () => {
+    if (!authorName.trim() || !authorLinkedin.trim()) return;
+    const { data: existing } = await supabase
+      .from("doc_dm_leads")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("links", authorLinkedin.trim())
+      .maybeSingle();
+    if (!existing) {
+      const { error } = await supabase.from("doc_dm_leads").insert({
+        org_id: orgId,
+        name: authorName.trim(),
+        links: authorLinkedin.trim(),
+      });
+      if (!error) {
+        queryClient.invalidateQueries({ queryKey: ["dm-leads", orgId] });
+        toast.success(`${authorName.trim()} saved to Leads`);
+      }
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: async (imagePath: string) => {
@@ -204,10 +265,12 @@ function ImageMode({ orgId }: { orgId: string }) {
         org_id: orgId,
         mode: "image",
         image_path: imagePath,
+        author_name: authorName || undefined,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["comment-history", orgId] });
+      await saveLeadIfNew();
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "Generation failed");
@@ -242,6 +305,29 @@ function ImageMode({ orgId }: { orgId: string }) {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Author Name</Label>
+          <Input
+            value={authorName}
+            onChange={(e) => setAuthorName(e.target.value)}
+            placeholder="Dr. Smith"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Author LinkedIn URL</Label>
+          <Input
+            value={authorLinkedin}
+            onChange={(e) => setAuthorLinkedin(e.target.value)}
+            placeholder="https://linkedin.com/in/dr-smith"
+          />
+        </div>
+      </div>
+      {authorName.trim() && authorLinkedin.trim() && (
+        <p className="text-xs text-muted-foreground">
+          This person will be saved to Leads after generation.
+        </p>
+      )}
       <div className="space-y-2">
         <Label>Screenshot of LinkedIn Post</Label>
         <div
