@@ -89,9 +89,10 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Start Apify actor (no cookies needed)
+    // 4. Start Apify actor — waitForFinish=90 means Apify waits up to 90s and
+    //    returns a SUCCEEDED status directly if the job is fast enough, skipping polling.
     const actorId = "unseenuser~linkedin-post-comment-reaction-extractor-no-cookies";
-    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&maxItems=500`;
+    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&maxItems=500&waitForFinish=90`;
 
     let runResponse: Response;
     try {
@@ -122,8 +123,9 @@ Deno.serve(async (req: Request) => {
     const runData = await runResponse.json();
     const runId = runData.data?.id;
     const datasetId = runData.data?.defaultDatasetId;
+    let initialStatus = runData.data?.status;
 
-    console.log("Apify run started:", runId, "dataset:", datasetId);
+    console.log("Apify run started:", runId, "dataset:", datasetId, "status:", initialStatus);
 
     if (!runId || !datasetId) {
       return new Response(
@@ -132,31 +134,48 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 5. Poll for completion (max ~5 minutes)
-    const maxWaitMs = 300_000;
-    const pollIntervalMs = 10_000;
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < maxWaitMs) {
-      await sleep(pollIntervalMs);
-
-      const statusResp = await fetch(
-        `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
+    if (initialStatus === "FAILED" || initialStatus === "ABORTED" || initialStatus === "TIMED-OUT") {
+      return new Response(
+        JSON.stringify({ error: "Scraping failed — the actor did not complete successfully" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-      if (!statusResp.ok) {
-        console.error("Failed to poll Apify run status:", statusResp.status);
-        continue;
+    }
+
+    // 5. Poll for completion if not already done (max ~100s to stay within edge function limits)
+    if (initialStatus !== "SUCCEEDED") {
+      const maxWaitMs = 100_000;
+      const pollIntervalMs = 10_000;
+      const startTime = Date.now();
+      let succeeded = false;
+
+      while (Date.now() - startTime < maxWaitMs) {
+        await sleep(pollIntervalMs);
+
+        const statusResp = await fetch(
+          `https://api.apify.com/v2/actor-runs/${runId}?token=${apifyToken}`
+        );
+        if (!statusResp.ok) {
+          console.error("Failed to poll Apify run status:", statusResp.status);
+          continue;
+        }
+
+        const statusData = await statusResp.json();
+        const status = statusData.data?.status;
+        console.log("Apify poll:", status, `(${Math.round((Date.now() - startTime) / 1000)}s)`);
+
+        if (status === "SUCCEEDED") { succeeded = true; break; }
+        if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
+          return new Response(
+            JSON.stringify({ error: "Scraping failed — the actor did not complete successfully" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
-      const statusData = await statusResp.json();
-      const status = statusData.data?.status;
-      console.log("Apify poll:", status, `(${Math.round((Date.now() - startTime) / 1000)}s)`);
-
-      if (status === "SUCCEEDED") break;
-      if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
+      if (!succeeded) {
         return new Response(
-          JSON.stringify({ error: "Scraping failed — the actor did not complete successfully" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Scraping timed out — the post may be too large. Try again in a few minutes." }),
+          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
     }

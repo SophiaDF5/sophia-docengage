@@ -63,7 +63,7 @@ FORMATTING RULES — this is critical:
 - Use "right?" and "you know?" as natural connectors
 - Short sentences. Fragment sentences are fine. Like this.
 - No bullet points, no numbered lists, no formal structure
-- Never use phrases like "I'd love to connect" or "Let's schedule a call" — too corporate
+- Never use phrases like "I'd love to connect", "Let's schedule a call", or "Wow..." — too corporate or performative
 - No emojis unless they fit naturally (max 1-2)
 - Sound like you're talking to a friend, not writing a LinkedIn message`;
 

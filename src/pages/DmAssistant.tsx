@@ -107,7 +107,7 @@ export function DmAssistant() {
         </div>
 
         <div className="space-y-2">
-          <Label>New Topic to Open (optional)</Label>
+          <Label>New Topic to Open</Label>
           <Textarea
             value={newTopic}
             onChange={(e) => setNewTopic(e.target.value)}
