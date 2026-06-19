@@ -372,18 +372,23 @@ function ImageMode({ orgId }: { orgId: string }) {
 
 function CommentHistory({ orgId }: { orgId: string }) {
   const queryClient = useQueryClient();
-  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
 
   const historyQuery = useQuery({
     queryKey: ["comment-history", orgId],
     queryFn: async () => {
+      await supabase
+        .from("doc_comments")
+        .delete()
+        .eq("org_id", orgId)
+        .lt("created_at", fiveDaysAgo);
+
       const { data, error } = await supabase
         .from("doc_comments")
         .select(
           "id, generated_content, edited_content, source, created_at, doc_posts(author_name, content)"
         )
         .eq("org_id", orgId)
-        .gte("created_at", threeDaysAgo)
         .order("created_at", { ascending: false })
         .limit(20);
 

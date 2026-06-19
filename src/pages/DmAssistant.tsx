@@ -292,6 +292,13 @@ function DmHistory({ orgId }: { orgId: string }) {
   const historyQuery = useQuery({
     queryKey: ["dm-history", orgId],
     queryFn: async () => {
+      const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from("doc_dm_drafts")
+        .delete()
+        .eq("org_id", orgId)
+        .lt("created_at", fiveDaysAgo);
+
       const { data, error } = await supabase
         .from("doc_dm_drafts")
         .select("id, conversation_context, last_reply, generated_content, created_at")
