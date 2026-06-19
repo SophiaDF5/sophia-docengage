@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { callEdgeFunction } from "../lib/apiClient";
@@ -10,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Skeleton } from "../components/ui/skeleton";
-import { Copy, RefreshCw, Loader2, Trash2, UserCircle, X } from "lucide-react";
-import type { DmDraft, DmLead } from "../types/database";
+import { Copy, RefreshCw, Loader2, Trash2 } from "lucide-react";
+import type { DmDraft } from "../types/database";
 
 interface GenerateDmResult {
   data: {
@@ -28,43 +27,6 @@ export function DmAssistant() {
   const [theirLastReply, setTheirLastReply] = useState("");
   const [newTopic, setNewTopic] = useState("");
 
-  // Lead info
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
-  const [leadName, setLeadName] = useState("");
-  const [leadBio, setLeadBio] = useState("");
-  const [leadLinks, setLeadLinks] = useState("");
-
-  // Fetch saved leads
-  const leadsQuery = useQuery({
-    queryKey: ["dm-leads", currentOrgId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("doc_dm_leads")
-        .select("*")
-        .eq("org_id", currentOrgId!)
-        .order("name");
-      if (error) throw error;
-      return data as DmLead[];
-    },
-    enabled: !!currentOrgId,
-  });
-
-  const leads = leadsQuery.data ?? [];
-
-  const selectLead = (lead: DmLead) => {
-    setSelectedLeadId(lead.id);
-    setLeadName(lead.name);
-    setLeadBio(lead.bio || "");
-    setLeadLinks(lead.links || "");
-  };
-
-  const clearLead = () => {
-    setSelectedLeadId(null);
-    setLeadName("");
-    setLeadBio("");
-    setLeadLinks("");
-  };
-
   // Generate DM
   const mutation = useMutation({
     mutationFn: async () => {
@@ -73,9 +35,6 @@ export function DmAssistant() {
         my_last_reply: myLastReply || undefined,
         their_last_reply: theirLastReply || undefined,
         new_topic: newTopic || undefined,
-        lead_name: leadName || undefined,
-        lead_bio: leadBio || undefined,
-        lead_links: leadLinks || undefined,
       });
     },
     onSuccess: () => {
@@ -117,49 +76,6 @@ export function DmAssistant() {
         <p className="text-sm text-muted-foreground mt-1">
           Generate DM replies using your trained tone.
         </p>
-      </div>
-
-      {/* Lead picker */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Lead (optional)</Label>
-          <Link to="/leads" className="text-xs text-muted-foreground hover:underline">
-            Manage leads
-          </Link>
-        </div>
-        {selectedLeadId ? (
-          <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/40">
-            <UserCircle className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{leadName}</p>
-              {leadBio && <p className="text-xs text-muted-foreground truncate">{leadBio}</p>}
-            </div>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={clearLead}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {leads.map((lead) => (
-              <Button
-                key={lead.id}
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => selectLead(lead)}
-              >
-                <UserCircle className="h-3.5 w-3.5" />
-                {lead.name}
-              </Button>
-            ))}
-            {leads.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                No leads saved yet.{" "}
-                <Link to="/leads" className="hover:underline">Add one</Link>.
-              </p>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Conversation fields */}
