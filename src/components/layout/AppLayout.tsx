@@ -5,6 +5,7 @@ import { Button } from "../ui/button";
 import {
   MessageSquare,
   Mail,
+  UserCircle,
   Users,
   Settings,
   LogOut,
@@ -21,6 +22,7 @@ import { cn } from "../../lib/utils";
 const navItems = [
   { path: "/", label: "Comments", icon: MessageSquare },
   { path: "/dm", label: "DM Assistant", icon: Mail },
+  { path: "/leads", label: "Leads", icon: UserCircle },
   { path: "/contacts", label: "Contacts", icon: Users },
   { path: "/settings", label: "Settings", icon: Settings },
 ];

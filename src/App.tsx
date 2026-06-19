@@ -7,6 +7,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { Login } from "./pages/auth/Login";
 import { CommentGenerator } from "./pages/CommentGenerator";
 import { DmAssistant } from "./pages/DmAssistant";
+import { Leads } from "./pages/Leads";
 import { Contacts } from "./pages/Contacts";
 import { Settings } from "./pages/Settings";
 
@@ -54,6 +55,7 @@ function AppRoutes() {
       >
         <Route path="/" element={<CommentGenerator />} />
         <Route path="/dm" element={<DmAssistant />} />
+        <Route path="/leads" element={<Leads />} />
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

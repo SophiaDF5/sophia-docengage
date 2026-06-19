@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { callEdgeFunction } from "../lib/apiClient";
@@ -8,19 +9,8 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
-import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import {
-  Copy,
-  RefreshCw,
-  Loader2,
-  Trash2,
-  Plus,
-  UserCircle,
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-} from "lucide-react";
+import { Copy, RefreshCw, Loader2, Trash2, UserCircle, X } from "lucide-react";
 import type { DmDraft, DmLead } from "../types/database";
 
 interface GenerateDmResult {
@@ -34,8 +24,8 @@ export function DmAssistant() {
   const { currentOrgId } = useOrganization();
   const queryClient = useQueryClient();
 
-  const [conversationContext, setConversationContext] = useState("");
-  const [lastReply, setLastReply] = useState("");
+  const [myLastReply, setMyLastReply] = useState("");
+  const [theirLastReply, setTheirLastReply] = useState("");
   const [newTopic, setNewTopic] = useState("");
 
   // Lead info
@@ -43,8 +33,6 @@ export function DmAssistant() {
   const [leadName, setLeadName] = useState("");
   const [leadBio, setLeadBio] = useState("");
   const [leadLinks, setLeadLinks] = useState("");
-  const [showLeadForm, setShowLeadForm] = useState(false);
-  const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
 
   // Fetch saved leads
   const leadsQuery = useQuery({
@@ -63,78 +51,18 @@ export function DmAssistant() {
 
   const leads = leadsQuery.data ?? [];
 
-  // Save lead
-  const saveLeadMutation = useMutation({
-    mutationFn: async () => {
-      if (editingLeadId) {
-        const { error } = await supabase
-          .from("doc_dm_leads")
-          .update({ name: leadName, bio: leadBio || null, links: leadLinks || null })
-          .eq("id", editingLeadId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("doc_dm_leads")
-          .insert({
-            org_id: currentOrgId!,
-            name: leadName,
-            bio: leadBio || null,
-            links: leadLinks || null,
-          });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dm-leads", currentOrgId] });
-      toast.success(editingLeadId ? "Lead updated" : "Lead saved");
-      setEditingLeadId(null);
-      setShowLeadForm(false);
-    },
-    onError: () => toast.error("Failed to save lead"),
-  });
-
-  const deleteLeadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("doc_dm_leads").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dm-leads", currentOrgId] });
-      if (selectedLeadId) {
-        setSelectedLeadId(null);
-        setLeadName("");
-        setLeadBio("");
-        setLeadLinks("");
-      }
-      toast.success("Lead deleted");
-    },
-    onError: () => toast.error("Failed to delete lead"),
-  });
-
   const selectLead = (lead: DmLead) => {
     setSelectedLeadId(lead.id);
     setLeadName(lead.name);
     setLeadBio(lead.bio || "");
     setLeadLinks(lead.links || "");
-    setShowLeadForm(false);
-    setEditingLeadId(null);
   };
 
-  const startNewLead = () => {
+  const clearLead = () => {
     setSelectedLeadId(null);
     setLeadName("");
     setLeadBio("");
     setLeadLinks("");
-    setEditingLeadId(null);
-    setShowLeadForm(true);
-  };
-
-  const startEditLead = (lead: DmLead) => {
-    setLeadName(lead.name);
-    setLeadBio(lead.bio || "");
-    setLeadLinks(lead.links || "");
-    setEditingLeadId(lead.id);
-    setShowLeadForm(true);
   };
 
   // Generate DM
@@ -142,8 +70,8 @@ export function DmAssistant() {
     mutationFn: async () => {
       return callEdgeFunction<GenerateDmResult>("doc_generate_dm", {
         org_id: currentOrgId,
-        conversation_context: conversationContext,
-        last_reply: lastReply || undefined,
+        my_last_reply: myLastReply || undefined,
+        their_last_reply: theirLastReply || undefined,
         new_topic: newTopic || undefined,
         lead_name: leadName || undefined,
         lead_bio: leadBio || undefined,
@@ -179,7 +107,8 @@ export function DmAssistant() {
     );
   }
 
-  const canGenerate = conversationContext.trim() && lastReply.trim();
+  const canGenerate =
+    (myLastReply.trim() && theirLastReply.trim()) || newTopic.trim();
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -190,68 +119,87 @@ export function DmAssistant() {
         </p>
       </div>
 
-      {/* Saved Leads */}
-      <LeadSection
-        leads={leads}
-        selectedLeadId={selectedLeadId}
-        showLeadForm={showLeadForm}
-        editingLeadId={editingLeadId}
-        leadName={leadName}
-        leadBio={leadBio}
-        leadLinks={leadLinks}
-        onSelectLead={selectLead}
-        onStartNewLead={startNewLead}
-        onStartEditLead={startEditLead}
-        onDeleteLead={(id) => deleteLeadMutation.mutate(id)}
-        onSetLeadName={setLeadName}
-        onSetLeadBio={setLeadBio}
-        onSetLeadLinks={setLeadLinks}
-        onSaveLead={() => saveLeadMutation.mutate()}
-        onCancelForm={() => {
-          setShowLeadForm(false);
-          setEditingLeadId(null);
-        }}
-        isSaving={saveLeadMutation.isPending}
-      />
+      {/* Lead picker */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>Lead (optional)</Label>
+          <Link to="/leads" className="text-xs text-muted-foreground hover:underline">
+            Manage leads
+          </Link>
+        </div>
+        {selectedLeadId ? (
+          <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/40">
+            <UserCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{leadName}</p>
+              {leadBio && <p className="text-xs text-muted-foreground truncate">{leadBio}</p>}
+            </div>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={clearLead}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {leads.map((lead) => (
+              <Button
+                key={lead.id}
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => selectLead(lead)}
+              >
+                <UserCircle className="h-3.5 w-3.5" />
+                {lead.name}
+              </Button>
+            ))}
+            {leads.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No leads saved yet.{" "}
+                <Link to="/leads" className="hover:underline">Add one</Link>.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Conversation fields */}
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label>Last Conversation</Label>
+          <Label>My Last Reply</Label>
           <Textarea
-            value={conversationContext}
-            onChange={(e) => setConversationContext(e.target.value)}
-            placeholder="Paste the conversation so far..."
-            rows={6}
+            value={myLastReply}
+            onChange={(e) => setMyLastReply(e.target.value)}
+            placeholder="Paste the last thing you said..."
+            rows={4}
           />
           <p className="text-xs text-muted-foreground">
-            The context of your conversation with this person
+            The last message you sent in this conversation
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label>Last Reply</Label>
+          <Label>Their Last Reply</Label>
           <Textarea
-            value={lastReply}
-            onChange={(e) => setLastReply(e.target.value)}
-            placeholder="Paste their most recent message..."
-            rows={3}
+            value={theirLastReply}
+            onChange={(e) => setTheirLastReply(e.target.value)}
+            placeholder="Paste their most recent response..."
+            rows={4}
           />
           <p className="text-xs text-muted-foreground">
-            The doctor's most recent message you need to reply to
+            Their response to your last message
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label>New Topic (optional)</Label>
+          <Label>New Topic to Open (optional)</Label>
           <Textarea
             value={newTopic}
             onChange={(e) => setNewTopic(e.target.value)}
-            placeholder="e.g. I saw you recently posted about..."
+            placeholder="Paste their post or bio to start a new conversation about..."
             rows={3}
           />
           <p className="text-xs text-muted-foreground">
-            Bring up a new topic — like something they recently posted about
+            Paste a post or bio to open a new conversation — or weave into an existing one
           </p>
         </div>
 
@@ -320,187 +268,6 @@ export function DmAssistant() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Lead Section                                                       */
-/* ------------------------------------------------------------------ */
-
-interface LeadSectionProps {
-  leads: DmLead[];
-  selectedLeadId: string | null;
-  showLeadForm: boolean;
-  editingLeadId: string | null;
-  leadName: string;
-  leadBio: string;
-  leadLinks: string;
-  onSelectLead: (lead: DmLead) => void;
-  onStartNewLead: () => void;
-  onStartEditLead: (lead: DmLead) => void;
-  onDeleteLead: (id: string) => void;
-  onSetLeadName: (v: string) => void;
-  onSetLeadBio: (v: string) => void;
-  onSetLeadLinks: (v: string) => void;
-  onSaveLead: () => void;
-  onCancelForm: () => void;
-  isSaving: boolean;
-}
-
-function LeadSection({
-  leads,
-  selectedLeadId,
-  showLeadForm,
-  editingLeadId,
-  leadName,
-  leadBio,
-  leadLinks,
-  onSelectLead,
-  onStartNewLead,
-  onStartEditLead,
-  onDeleteLead,
-  onSetLeadName,
-  onSetLeadBio,
-  onSetLeadLinks,
-  onSaveLead,
-  onCancelForm,
-  isSaving,
-}: LeadSectionProps) {
-  const [expanded, setExpanded] = useState(true);
-
-  return (
-    <Card>
-      <CardHeader
-        className="pb-2 cursor-pointer flex flex-row items-center justify-between"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <UserCircle className="h-4 w-4" />
-          Leads
-          {selectedLeadId && !expanded && (
-            <span className="text-muted-foreground font-normal ml-1">
-              — {leads.find((l) => l.id === selectedLeadId)?.name}
-            </span>
-          )}
-        </CardTitle>
-        {expanded ? (
-          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        )}
-      </CardHeader>
-
-      {expanded && (
-        <CardContent className="space-y-3">
-          {/* Saved leads list */}
-          {leads.length > 0 && (
-            <div className="space-y-1">
-              {leads.map((lead) => (
-                <div
-                  key={lead.id}
-                  className={`flex items-center justify-between p-2 rounded-md text-sm cursor-pointer hover:bg-muted/50 ${
-                    selectedLeadId === lead.id ? "bg-muted" : ""
-                  }`}
-                  onClick={() => onSelectLead(lead)}
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{lead.name}</p>
-                    {lead.bio && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {lead.bio}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-1 shrink-0 ml-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onStartEditLead(lead);
-                      }}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteLead(lead.id);
-                      }}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Add new lead button */}
-          {!showLeadForm && (
-            <Button variant="outline" size="sm" onClick={onStartNewLead}>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Lead
-            </Button>
-          )}
-
-          {/* Lead form (add / edit) */}
-          {showLeadForm && (
-            <div className="space-y-3 border rounded-md p-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                {editingLeadId ? "Edit Lead" : "New Lead"}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Name</Label>
-                  <Input
-                    value={leadName}
-                    onChange={(e) => onSetLeadName(e.target.value)}
-                    placeholder="Dr. Jane Smith"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Links</Label>
-                  <Input
-                    value={leadLinks}
-                    onChange={(e) => onSetLeadLinks(e.target.value)}
-                    placeholder="LinkedIn URL, website, etc."
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Bio</Label>
-                <Textarea
-                  value={leadBio}
-                  onChange={(e) => onSetLeadBio(e.target.value)}
-                  placeholder="Their headline, specialty, interests..."
-                  rows={2}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={onSaveLead}
-                  disabled={!leadName.trim() || isSaving}
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : null}
-                  {editingLeadId ? "Update" : "Save"}
-                </Button>
-                <Button variant="outline" size="sm" onClick={onCancelForm}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      )}
-    </Card>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  DM History                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -550,7 +317,7 @@ function DmHistory({ orgId }: { orgId: string }) {
               {new Date(item.created_at).toLocaleDateString()}
             </p>
             <p className="text-xs text-muted-foreground line-clamp-1">
-              Their reply: &ldquo;{item.last_reply}&rdquo;
+              They said: &ldquo;{item.last_reply}&rdquo;
             </p>
             <p className="text-sm line-clamp-3">
               {item.generated_content}

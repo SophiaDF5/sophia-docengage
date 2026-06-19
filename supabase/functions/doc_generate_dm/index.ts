@@ -7,13 +7,16 @@ import { callOpenAI } from "../_shared/openai.ts";
 
 const GenerateDmSchema = z.object({
   org_id: z.string().uuid(),
-  conversation_context: z.string().min(1).max(5000),
-  last_reply: z.string().min(1).max(3000),
+  my_last_reply: z.string().max(5000).optional(),
+  their_last_reply: z.string().max(3000).optional(),
   new_topic: z.string().max(3000).optional(),
   lead_name: z.string().max(200).optional(),
   lead_bio: z.string().max(1000).optional(),
   lead_links: z.string().max(500).optional(),
-});
+}).refine(
+  (d) => (d.my_last_reply && d.their_last_reply) || d.new_topic,
+  { message: "Provide both replies to continue a conversation, or a new topic to start one" }
+);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -72,12 +75,23 @@ FORMATTING RULES — this is critical:
       if (body.lead_links) leadContext += `\nLinks: ${body.lead_links}`;
     }
 
-    const systemPrompt = `${basePrompt}${humanStyleGuide}\n\nYou are drafting a direct message reply. Match the tone and energy of the ongoing conversation. Keep your reply concise and natural — avoid sounding scripted.${body.new_topic ? " The user also wants to naturally bring up a new topic in this reply — weave it in so it doesn't feel forced." : ""}${leadContext}`;
+    const isNewConvo = !body.my_last_reply && !body.their_last_reply;
 
-    let userPrompt = `Here is the conversation so far:\n\n${body.conversation_context}\n\nTheir last message:\n"${body.last_reply}"`;
+    const systemPrompt = `${basePrompt}${humanStyleGuide}\n\n${
+      isNewConvo
+        ? "You are drafting an opening direct message to start a new conversation. Make it feel natural and genuine — not salesy or forced."
+        : "You are drafting a direct message reply. Match the tone and energy of the ongoing conversation. Keep your reply concise and natural — avoid sounding scripted."
+    }${body.new_topic && !isNewConvo ? " The user also wants to naturally bring up a new topic in this reply — weave it in so it doesn't feel forced." : ""}${leadContext}`;
 
-    if (body.new_topic) {
-      userPrompt += `\n\nAlso bring up this new topic naturally in your reply:\n"${body.new_topic}"`;
+    let userPrompt: string;
+
+    if (isNewConvo) {
+      userPrompt = `Open a new conversation based on this (their post or bio):\n\n"${body.new_topic}"`;
+    } else {
+      userPrompt = `Your last message:\n"${body.my_last_reply}"\n\nTheir reply:\n"${body.their_last_reply}"`;
+      if (body.new_topic) {
+        userPrompt += `\n\nAlso bring up this new topic naturally in your reply:\n"${body.new_topic}"`;
+      }
     }
 
     userPrompt += "\n\nDraft a reply:";
@@ -97,8 +111,8 @@ FORMATTING RULES — this is critical:
       .from("doc_dm_drafts")
       .insert({
         org_id: body.org_id,
-        conversation_context: body.conversation_context,
-        last_reply: body.last_reply,
+        conversation_context: body.my_last_reply || body.new_topic || "",
+        last_reply: body.their_last_reply || "",
         generated_content: generatedContent,
       })
       .select("id")

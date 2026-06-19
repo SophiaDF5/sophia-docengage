@@ -135,7 +135,6 @@ function OutputArea({
 function CaptionMode({ orgId }: { orgId: string }) {
   const [content, setContent] = useState("");
   const [authorName, setAuthorName] = useState("");
-  const [authorHeadline, setAuthorHeadline] = useState("");
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
@@ -145,7 +144,6 @@ function CaptionMode({ orgId }: { orgId: string }) {
         mode: "caption",
         content,
         author_name: authorName || undefined,
-        author_headline: authorHeadline || undefined,
       });
     },
     onSuccess: () => {
@@ -167,23 +165,13 @@ function CaptionMode({ orgId }: { orgId: string }) {
           rows={5}
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Author Name</Label>
-          <Input
-            value={authorName}
-            onChange={(e) => setAuthorName(e.target.value)}
-            placeholder="Dr. Smith"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Author Headline</Label>
-          <Input
-            value={authorHeadline}
-            onChange={(e) => setAuthorHeadline(e.target.value)}
-            placeholder="Cardiologist at Mayo Clinic"
-          />
-        </div>
+      <div className="space-y-2">
+        <Label>Author Name</Label>
+        <Input
+          value={authorName}
+          onChange={(e) => setAuthorName(e.target.value)}
+          placeholder="Dr. Smith"
+        />
       </div>
       <Button
         onClick={() => mutation.mutate()}
