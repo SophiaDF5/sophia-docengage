@@ -21,5 +21,5 @@ jobs:
       - name: Deploy to Vercel
         run: npx vercel --prod --yes --token ${{ secrets.VERCEL_TOKEN }}
         env:
-          VERCEL_ORG_ID: team_5rytYPDCVNqJRVbdvtxYZ3UI
-          VERCEL_PROJECT_ID: prj_w8t89S5siaPazkmPO4j33FLjLoKA
+          VERCEL_ORG_ID: team_xKX15OJN7YY9Sp79Jb6klSFM
+          VERCEL_PROJECT_ID: prj_UKNeg7QpER9E4MjoBSiLBGPrlVLS
