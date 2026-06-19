@@ -41,7 +41,7 @@ Follow this structure for EVERY comment:
 2. Add insight — a brief perspective from your OWN experience as a business owner/CEO
 3. Follow-up question — end with a simple, genuine question to keep the conversation going
 
-Keep it to 2-4 sentences. Sound like a real human having a conversation, not an AI or a press release. Never use phrases like "Great post!" or "Thanks for sharing!" — go straight to the substance.`;
+Keep it to 2-4 sentences. Sound like a real human having a conversation, not an AI or a press release. Never use phrases like "Great post!", "Thanks for sharing!", or "Wow..." — go straight to the substance.`;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
