@@ -9,17 +9,12 @@ const ScrapeSchema = z.object({
   linkedin_post_url: z.string().url(),
 });
 
-interface ApifyComment {
-  data_type: "comment";
-  author?: { name?: string; headline?: string; profile_url?: string };
+interface ApifyEngager {
+  linkedinUrl?: string;
+  fullName?: string;
+  headline?: string;
+  engagementType?: string;
 }
-
-interface ApifyReaction {
-  data_type: "reaction";
-  reactor?: { name?: string; headline?: string; profile_url?: string };
-}
-
-type ApifyItem = ApifyComment | ApifyReaction | { data_type: "error" };
 
 const HEALTHCARE_KEYWORDS = [
   // Doctors & physicians
@@ -103,6 +98,7 @@ Deno.serve(async (req: Request) => {
 
     // 3. Check required env vars
     const apifyToken = Deno.env.get("APIFY_API_KEY");
+    const liAt = Deno.env.get("LINKEDIN_LI_AT");
 
     if (!apifyToken) {
       return new Response(
@@ -111,10 +107,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Start Apify actor — waitForFinish=90 means Apify waits up to 90s and
-    //    returns a SUCCEEDED status directly if the job is fast enough, skipping polling.
-    const actorId = "unseenuser~linkedin-post-comment-reaction-extractor-no-cookies";
-    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&maxItems=500&waitForFinish=90`;
+    if (!liAt) {
+      return new Response(
+        JSON.stringify({ error: "LinkedIn cookie not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 4. Start Apify actor with LinkedIn session cookie
+    const cookies = [
+      { name: "li_at", value: liAt, domain: ".www.linkedin.com", path: "/", secure: true, httpOnly: true, sameSite: "None" },
+    ];
+
+    const actorId = "alizarin_refrigerator-owner~linkedin-post-engagers-scraper";
+    const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&waitForFinish=90`;
 
     let runResponse: Response;
     try {
@@ -122,7 +128,10 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          posts: [normalizeLinkedInUrl(body.linkedin_post_url)],
+          postUrls: [normalizeLinkedInUrl(body.linkedin_post_url)],
+          cookies: JSON.stringify(cookies),
+          demoMode: false,
+          maxEngagersPerPost: 500,
         }),
       });
     } catch (err) {
@@ -214,29 +223,23 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const allItems: ApifyItem[] = await datasetResponse.json();
+    const allItems: ApifyEngager[] = await datasetResponse.json();
     console.log("Total items from Apify:", allItems.length);
 
     // 7. Deduplicate and filter for doctor leads
     const seen = new Set<string>();
     const doctorLeads: { name: string; profileUrl: string; headline: string; engagementType: string }[] = [];
 
-    for (const item of allItems) {
-      if (item.data_type === "error") continue;
-
-      const person = item.data_type === "comment"
-        ? (item as ApifyComment).author
-        : (item as ApifyReaction).reactor;
-
-      const profileUrl = person?.profile_url;
-      const name = person?.name;
-      const headline = person?.headline ?? "";
+    for (const item of allItems as ApifyEngager[]) {
+      const profileUrl = item.linkedinUrl;
+      const name = item.fullName;
+      const headline = item.headline ?? "";
 
       if (!profileUrl || !name || seen.has(profileUrl)) continue;
       seen.add(profileUrl);
 
       if (isDoctorLead(name, headline)) {
-        doctorLeads.push({ name, profileUrl, headline, engagementType: item.data_type });
+        doctorLeads.push({ name, profileUrl, headline, engagementType: item.engagementType ?? "unknown" });
       }
     }
 
