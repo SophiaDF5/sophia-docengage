@@ -253,6 +253,7 @@ Deno.serve(async (req: Request) => {
           total_engagers: seen.size,
           doctors_found: doctorLeads.length,
           contacts_saved: contactsNew,
+          _debug_first_item: allItems[0] ?? null,
         },
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
