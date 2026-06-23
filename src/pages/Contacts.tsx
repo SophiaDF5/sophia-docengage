@@ -296,15 +296,15 @@ function ScrapeDialog({ orgId }: { orgId: string }) {
   const scrapeMutation = useMutation({
     mutationFn: async () => {
       return callEdgeFunction<{
-        data: { total_engagers: number; doctors_found: number; contacts_saved: number };
+        data: { total_items: number; total_engagers: number; doctors_found: number; contacts_saved: number };
       }>("doc_scrape_post_commenters", {
         org_id: orgId,
         linkedin_post_url: postUrl,
       });
     },
     onSuccess: (result) => {
-      const { total_engagers, doctors_found, contacts_saved } = result.data;
-      toast.success(`Scraped ${total_engagers} engagers, found ${doctors_found} doctors, saved ${contacts_saved} new contacts`);
+      const { total_items, total_engagers, doctors_found, contacts_saved } = result.data;
+      toast.success(`${total_items} items from Apify → ${total_engagers} unique engagers → ${doctors_found} doctors → ${contacts_saved} saved`);
       setOpen(false);
       setPostUrl("");
       queryClient.invalidateQueries({ queryKey: ["contacts", orgId] });
