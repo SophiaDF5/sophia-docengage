@@ -9,17 +9,12 @@ const ScrapeSchema = z.object({
   linkedin_post_url: z.string().url(),
 });
 
-interface ApifyComment {
-  data_type: "comment";
-  author?: { name?: string; headline?: string; profile_url?: string };
+interface ApifyItem {
+  data_type: "comment" | "reaction" | "error";
+  name?: string;
+  headline?: string;
+  profile_url?: string;
 }
-
-interface ApifyReaction {
-  data_type: "reaction";
-  reactor?: { name?: string; headline?: string; profile_url?: string };
-}
-
-type ApifyItem = ApifyComment | ApifyReaction;
 
 const HEALTHCARE_KEYWORDS = [
   // Doctors & physicians
@@ -200,13 +195,11 @@ Deno.serve(async (req: Request) => {
     const doctorLeads: { name: string; profileUrl: string; headline: string; engagementType: string }[] = [];
 
     for (const item of allItems) {
-      const person = item.data_type === "comment"
-        ? (item as ApifyComment).author
-        : (item as ApifyReaction).reactor;
+      if (item.data_type === "error") continue;
 
-      const profileUrl = person?.profile_url;
-      const name = person?.name;
-      const headline = person?.headline ?? "";
+      const profileUrl = item.profile_url;
+      const name = item.name;
+      const headline = item.headline ?? "";
 
       if (!profileUrl || !name || seen.has(profileUrl)) continue;
       seen.add(profileUrl);
