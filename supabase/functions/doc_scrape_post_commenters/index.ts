@@ -100,7 +100,7 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          posts: [body.linkedin_post_url],
+          posts: [body.linkedin_post_url.split("?")[0].replace(/\/$/, "") + "/"],
         }),
       });
     } catch (err) {
