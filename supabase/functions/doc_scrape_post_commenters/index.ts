@@ -61,6 +61,28 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Normalize any LinkedIn post URL to the urn:li:activity format the Apify actor requires.
+// Handles: /posts/slug-activity-XXXXXXXX-XXXX, /posts/slug-share-XXXXXXXX-XXXX,
+//          /feed/update/urn:li:activity:XXXXXXXX, and bare numeric IDs.
+function normalizeLinkedInUrl(raw: string): string {
+  const clean = raw.split("?")[0].replace(/\/$/, "");
+
+  // Already in urn format
+  if (clean.includes("urn:li:activity:")) {
+    const match = clean.match(/urn:li:activity:(\d+)/);
+    if (match) return `https://www.linkedin.com/feed/update/urn:li:activity:${match[1]}/`;
+  }
+
+  // Extract the numeric activity ID (17-19 digits) from the URL path
+  const match = clean.match(/[^0-9](\d{17,19})[^0-9]/);
+  if (match) {
+    return `https://www.linkedin.com/feed/update/urn:li:activity:${match[1]}/`;
+  }
+
+  // Fallback: return cleaned URL as-is
+  return clean + "/";
+}
+
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -100,7 +122,7 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          posts: [body.linkedin_post_url.split("?")[0].replace(/\/$/, "") + "/"],
+          posts: [normalizeLinkedInUrl(body.linkedin_post_url)],
         }),
       });
     } catch (err) {
