@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postUrls: [normalizeLinkedInUrl(body.linkedin_post_url)],
-          cookies: JSON.stringify(cookies),
+          cookies: cookies,
           demoMode: false,
           maxEngagersPerPost: 500,
         }),
