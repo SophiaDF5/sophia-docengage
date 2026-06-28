@@ -132,7 +132,7 @@ Deno.serve(async (req: Request) => {
 
     // 4. Start Apify actor with LinkedIn session cookie
     const cookies = [
-      { name: "li_at", value: liAt, domain: ".www.linkedin.com", path: "/", secure: true, httpOnly: true, sameSite: "None" },
+      { name: "li_at", value: liAt, domain: ".linkedin.com", path: "/", secure: true, httpOnly: true, sameSite: "None" },
     ];
 
     const actorId = "alizarin_refrigerator-owner~linkedin-post-engagers-scraper";
@@ -145,7 +145,7 @@ Deno.serve(async (req: Request) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postUrls: [normalizeLinkedInUrl(body.linkedin_post_url)],
-          cookies: cookies,
+          cookies: JSON.stringify(cookies),
           demoMode: false,
           maxEngagersPerPost: 500,
         }),
