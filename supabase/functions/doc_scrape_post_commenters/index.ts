@@ -138,13 +138,16 @@ Deno.serve(async (req: Request) => {
     const actorId = "alizarin_refrigerator-owner~linkedin-post-engagers-scraper";
     const runUrl = `https://api.apify.com/v2/acts/${actorId}/runs?token=${apifyToken}&waitForFinish=90`;
 
+    const normalizedUrl = normalizeLinkedInUrl(body.linkedin_post_url);
+    console.log("Sending to Apify — postUrls:", normalizedUrl);
+
     let runResponse: Response;
     try {
       runResponse = await fetch(runUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postUrls: [normalizeLinkedInUrl(body.linkedin_post_url)],
+          postUrls: [normalizedUrl],
           cookies: JSON.stringify(cookies),
           demoMode: false,
           maxEngagersPerPost: 500,
